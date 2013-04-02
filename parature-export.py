@@ -1,8 +1,10 @@
 from restkit import Resource #pip install restkit
-from lxml import etree #apt-get install libxml2-dev libxslt-dev & pip install lxml
+import xml.etree.ElementTree as etree
 import urllib2
 import math
 import os
+import datetime
+import time
 
 def get_config(config_path):
 	config_vars = dict()
@@ -16,8 +18,24 @@ def get_config(config_path):
 
 	return config_vars	
 
+def throttle(min_period):
+   """Enforces throttling policy, will not call a method two times unless min_period has elapsed"""
+   def _throttle(fn):
+      calltime = [datetime.datetime.now() - datetime.timedelta(seconds=min_period)]
+      def __throttle(*params, **kwargs):
+         td = datetime.datetime.now() - calltime[0]
+         elapsed = (td.microseconds + (td.seconds + td.days * 24 * 3600) * 10 ** 6) / 10 ** 6
+         if elapsed < min_period:
+            wait_time = min_period - elapsed
+            time.sleep(wait_time)
+         rv = fn(*params, **kwargs)
+         calltime[0] = datetime.datetime.now()
+         return rv
+      return __throttle
+   return _throttle
+
 def pretty(etree_root):
-	return etree.tostring(etree_root, pretty_print=True)
+	return etree.tostring(etree_root)
 
 def save_attachments(resource, subdirectory):
 
@@ -58,12 +76,15 @@ class Parature(Resource):
 		root = etree.fromstring(response.body_string())
 		return root
 
+	@throttle(1)
 	def api_get(self, id):
 		return self.get(str(id), _token_ = c['API_TOKEN'], _history_ = True)
 
+        @throttle(1)
 	def api_list(self, count=False, page=0):
 		return self.get(_token_ = c['API_TOKEN'], _total_ = count, _pageSize_ = c['LIST_PAGE_SIZE'], _startPage_ = page, _order_ = "Date_Created_asc_")
 
+        @throttle(1)
 	def api_list_count(self):
 		doc = self.api_list(True)
 		return doc.attrib['total']
@@ -120,9 +141,7 @@ class Download(Parature):
 		super(Ticket, self).__init__()
 
 if __name__ == "__main__":
-
 	c = get_config('./config')
-
 	#a = Account()
 	#a.export()
 	t = Ticket()
