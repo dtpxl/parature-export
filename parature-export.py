@@ -1,10 +1,12 @@
 from restkit import Resource  # pip install restkit
+from restkit.errors import ResourceError, RequestFailed, RequestError 
 import xml.etree.ElementTree as etree
 import urllib2
 import math
 import os
 import datetime
 import time
+import re
 
 def get_config(config_path):
 	config_vars = dict()
@@ -101,7 +103,8 @@ class Parature(Resource):
 		# Check for exsisting items
 		dir_path = "./" + c['JOB_ID'] + "/" + resource_type + "/"
 		if os.path.exists(dir_path):
-			done_file_count = len(os.listdir(dir_path))
+			files = [f for f in os.listdir(dir_path) if re.match(r'.*\.xml', f)]
+			done_file_count = len(files)
 			if (done_file_count == count) :
 				print "All of this type done, skipping"
 				return
@@ -134,10 +137,12 @@ class Parature(Resource):
 				skip = 0
 				for resource in resource_list:
 					resource_id = resource.attrib['id']
-					resource_full = self.api_get(resource_id)
-					save_XML(data=pretty(resource_full), subdirectory=resource_type, filename=resource_id)
-					save_attachments(resource_full, resource_type + "/" + resource_id)
-
+					try:
+						resource_full = self.api_get(resource_id)
+						save_XML(data=pretty(resource_full), subdirectory=resource_type, filename=resource_id)
+						save_attachments(resource_full, resource_type + "/" + resource_id)
+					except ResourceError:
+						print 'Error getting resource ' + resource_id
 class Account(Parature):
 	def __init__(self, **kwargs):
 		self.api_resource_path = "Account/"
